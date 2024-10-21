@@ -12,7 +12,7 @@ def parse_hostfile(file_path: str) -> Dict[int, Dict[str, Union[str, int]]]:
         while line:
             splitted_data = line.split(' ')
             ip = splitted_data[0]
-            num_device = int(splitted_data[1][6:7])
+            num_device = int(splitted_data[1])
 
             hostfile_info[num_node] = dict()
             hostfile_info[num_node]["ip"] = ip
