@@ -139,8 +139,9 @@ class HomoCostEstimator(CostEstimator):
 
 
 class HeteroCostEstimator(CostEstimator):
-    def __init__(self, profile_data: Dict, model_config: ModelConfig, model_volume, gpu_cluster: GPUCluster):
+    def __init__(self, profile_data: Dict, model_config: ModelConfig, model_volume, gpu_cluster: GPUCluster, args):
         super().__init__(profile_data, model_config, model_volume, gpu_cluster)
+        self.args = args
 
     def _get_specific_parameter_update_cost(self, optimizer_time: float, tp_deg: int, num_layers: int) -> float:
         ratio = num_layers / self.model_config.num_layers
@@ -151,7 +152,7 @@ class HeteroCostEstimator(CostEstimator):
 
     def _get_hetero_device_group_execution_time(self, device_types: List[str], intra_strategy: Tuple[int, int],
                                                 hetero_bs: List[int], start_layer_id: int, end_layer_id: int) -> List[float]:
-        args = parse_args()
+        # args = parse_args()
         dp_deg, tp_deg = intra_strategy
         execution_costs = []
         for dp_id, h_mbs in enumerate(hetero_bs):
@@ -163,7 +164,7 @@ class HeteroCostEstimator(CostEstimator):
             inner_dp_cost = 0.
 
             for h_mbs_slice in comb_h_mbs:
-                if h_mbs_slice > args.max_profiled_batch_size:
+                if h_mbs_slice > self.args.max_profiled_batch_size:
                     raise KeyError(f"batch_size({h_mbs_slice}) not found in profile_data")
 
                 inner_dp_cost += self._get_execution_time(device_type, f'tp{tp_deg}_bs{h_mbs_slice}',

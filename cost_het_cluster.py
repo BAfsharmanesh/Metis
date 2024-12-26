@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from arguments import parse_args
 from data_loader import ProfileDataLoader
 from model.cost_estimator import HeteroCostEstimator
-from model.activation_parameter import GPTActivationAndParam
+from model.activation_parameter import GPTActivationAndParam, GeneralModelActivationAndParam
 from model.device_group import StagePerformance
 from model.load_balancer import LayerLoadBalancer
 from search_space.plan import IntraStagePlanGenerator, InterStagePlanGenerator
@@ -32,7 +32,8 @@ def cost_het_cluster(args: argparse.Namespace, gpu_cluster: GPUCluster, profile_
         rank_device_map = stage_performance.get_device_placement()
 
         intra_stage_plan_generator = IntraStagePlanGenerator(inter_stage_plan, stage_performance, layer_load_balancer,
-                                                             args.max_profiled_tp_degree, args.max_profiled_batch_size)
+                                                             args.max_profiled_tp_degree, args.max_profiled_batch_size,
+                                                             args.min_profiled_batch_size)
 
         while intra_stage_plan_generator.has_next:
             intra_stage_plan = intra_stage_plan_generator.next()
@@ -49,13 +50,42 @@ def cost_het_cluster(args: argparse.Namespace, gpu_cluster: GPUCluster, profile_
     return estimate_costs
 
 
+
+def get_estimated_cost(args):
+
+    gpu_cluster = GPUCluster(host_entries=args.host_entries, nodes_info=args.nodes_info)
+    
+    print(f'{args=}')
+
+    data_loader = ProfileDataLoader(args.profile_data_path)
+    profile_data, _ = data_loader.load_profile_data_all()
+    # print(profile_data)
+
+    assert len(profile_data.keys()) > 0, 'There is no profiled data at the specified path.'
+
+    model_config = ModelConfig(model_name=args.model_name, num_layers=args.num_layers,
+                               sequence_length=-1, vocab_size=-1,
+                               hidden_size=-1, attention_head_size=-1)
+    
+    model_volume = GeneralModelActivationAndParam(model_config.num_layers, profile_data['model']['parameters'],
+                                                  profile_data['model']['activations'])
+    cost_estimator = HeteroCostEstimator(profile_data, model_config, model_volume, gpu_cluster, args)
+    layer_load_balancer = LayerLoadBalancer(gpu_cluster, profile_data, model_config, args.gbs, args.min_profiled_batch_size)
+
+    estimate_costs = cost_het_cluster(args, gpu_cluster, profile_data, model_config, cost_estimator, layer_load_balancer)
+    
+    sorted_result = sorted(estimate_costs, key=lambda kv: kv[6])
+    
+    return sorted_result
+
 if __name__ == '__main__':
     args = parse_args()
+    print(f'{args.num_layers=}')
     gpu_cluster = GPUCluster(hostfile_path=args.hostfile_path, clusterfile_path=args.clusterfile_path)
 
     data_loader = ProfileDataLoader(args.profile_data_path)
     profile_data, _ = data_loader.load_profile_data_all()
-    print(profile_data)
+    # print(profile_data)
 
     assert len(profile_data.keys()) > 0, 'There is no profiled data at the specified path.'
 
@@ -65,7 +95,7 @@ if __name__ == '__main__':
 
     model_volume = GPTActivationAndParam(model_config, profile_data['model']['parameters'])
     cost_estimator = HeteroCostEstimator(profile_data, model_config, model_volume, gpu_cluster)
-    layer_load_balancer = LayerLoadBalancer(gpu_cluster, profile_data, model_config, args.gbs)
+    layer_load_balancer = LayerLoadBalancer(gpu_cluster, profile_data, model_config, args.gbs, args.min_profiled_batch_size)
 
     estimate_costs = cost_het_cluster(args, gpu_cluster, profile_data, model_config, cost_estimator, layer_load_balancer)
 

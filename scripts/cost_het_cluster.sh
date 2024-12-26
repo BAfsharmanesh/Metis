@@ -35,6 +35,24 @@ if [ "${MODEL_NAME}" == "GPT" ]; then
               "
 fi
 
+
+if [ "${MODEL_NAME}" == "LLAMA2" ]; then
+  if [ "${MODEL_SIZE}" == "7B" ] ; then
+    HIDDEN_SIZE=4096
+    SEQUENCE_LENGTH=2046
+    NUM_LAYERS=32
+    VOCAB_SIZE=32000
+    ATTENTION_HEAD_SIZE=32
+  fi
+
+  model_specific_options="
+                --hidden_size=${HIDDEN_SIZE}
+                --sequence_length=${SEQUENCE_LENGTH}
+                --vocab_size=${VOCAB_SIZE}
+              "
+fi
+
+
 HOST_FILE_PATH="${HOME_DIR}/hostfile"
 CLUSTER_INFO_FILE_PATH="${HOME_DIR}/clusterfile.json"
 
@@ -51,12 +69,13 @@ env_options="
               --log_path=${LOG_PATH}
             "
 
-PROFILE_DATA_PATH="${HOME_DIR}/profile"
+PROFILE_DATA_PATH="${HOME_DIR}/${PROFILE_DIR}"
 
 hetspeed_options="
                     --profile_data_path=${PROFILE_DATA_PATH}
                     --max_profiled_tp_degree=${MAX_PROFILED_TP}
                     --max_profiled_batch_size=${MAX_PROFILED_BATCH_SIZE}
+                    --min_profiled_batch_size=${MIN_PROFILED_BATCH_SIZE}
                     --min_group_scale_variance=${SCALE_VARIANCE}
                     --max_permute_len=${MAX_PERMUTE_LEN}
                  "

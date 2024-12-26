@@ -43,6 +43,7 @@ def _add_hetspeed_args(parser: argparse.ArgumentParser) -> argparse.ArgumentPars
     parser.add_argument('--profile_data_path')
     parser.add_argument('--max_profiled_tp_degree', type=int)
     parser.add_argument('--max_profiled_batch_size', type=int)
+    parser.add_argument('--min_profiled_batch_size', type=int)
     parser.add_argument('--min_group_scale_variance', type=int)
     parser.add_argument('--max_permute_len', type=int)
 

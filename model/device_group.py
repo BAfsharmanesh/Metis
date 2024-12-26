@@ -41,10 +41,12 @@ class StagePerformance:
                                                 hetero_bs: List[int]) -> List[float]:
         dp_deg, tp_deg = intra_strategy
         execution_costs = []
+        print(f"{hetero_bs=}")
         for dp_id, h_mbs in enumerate(hetero_bs):
             device_type = device_types[(len(device_types) // dp_deg) * dp_id]
             comb_h_mbs = [2 ** i for i in range(int(math.log2(h_mbs)) if h_mbs != 0 else 0, -1, -1) if h_mbs & 2 ** i]
             inner_dp_cost = 0.
+            print(f"{comb_h_mbs=}")
             for h_mbs_slice in comb_h_mbs:
                 inner_dp_cost += self._get_execution_time(device_type, key=f'tp{tp_deg}_bs{h_mbs_slice}')
             execution_costs.append(inner_dp_cost)
@@ -67,7 +69,7 @@ class StagePerformance:
 
             if hetero_device_group:
                 data_load_balancer = DataLoadBalancer(self.profile_data, self.model_config)
-                hetero_bs = data_load_balancer.partition_data(device_types, intra_strategy, gbs // batches)
+                hetero_bs = data_load_balancer.partition_data(device_types, intra_strategy, gbs // batches // dp_deg) #! TODO: Check this
 
                 execution_costs = self._get_hetero_device_group_execution_time(device_types, intra_strategy, hetero_bs)
                 cur_performance = 0

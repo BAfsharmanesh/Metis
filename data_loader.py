@@ -21,6 +21,7 @@ class ProfileDataLoader:
         model_profile_data['num_layers'] = num_layers
         model_profile_data['batch_generator'] = raw_data['execution_time']['batch_generator_time_ms']
         model_profile_data['parameters'] = raw_data['model']['parameters']['parameters_per_layer_bytes']
+        model_profile_data['activations'] = raw_data['model']['parameters']['activation_parameters_bytes']
         return model_profile_data
 
     def _get_device_type_specific_profile_data(self, raw_data: Dict[str, Dict[str, Union[int, float, List]]])\
@@ -31,7 +32,7 @@ class ProfileDataLoader:
         layer_compute_times = [layer_compute for layer_compute in layer_computes]
         profile_data["time"]["layer-computes"] = layer_compute_times
         forward_backward_time = raw_data['execution_time']['forward_backward_time_ms']
-        profile_data["time"]["fb_sync"] = forward_backward_time - sum(layer_compute_times)
+        profile_data["time"]["fb_sync"] = 0.000001 + forward_backward_time - sum(layer_compute_times)
         profile_data['memory'] = raw_data['execution_memory']['layer_memory_total_mb']
 
         return profile_data
