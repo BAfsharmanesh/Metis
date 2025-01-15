@@ -1,0 +1,21 @@
+{
+  "IP1": {
+    "instance_type": "A6000",
+    "inter_bandwidth": 312500000.0,
+    "intra_bandwidth": 5312500000.0,
+    "memory": 48
+  },
+    "IP2": {
+    "instance_type": "A6000",
+    "inter_bandwidth": 312500000.0,
+    "intra_bandwidth": 5312500000.0,
+    "memory": 48
+  }
+  ,
+    "IP3": {
+    "instance_type": "A6000",
+    "inter_bandwidth": 312500000.0,
+    "intra_bandwidth": 5312500000.0,
+    "memory": 48
+  }
+}

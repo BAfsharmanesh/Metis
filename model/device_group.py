@@ -11,13 +11,14 @@ if TYPE_CHECKING:
 
 
 class StagePerformance:
-    def __init__(self, model_config, profile_data: Dict, gpu_cluster, plan: 'InterStagePlan'):
+    def __init__(self, model_config, profile_data: Dict, gpu_cluster, plan: 'InterStagePlan', min_bs: int = 1):
         self.model_config = model_config
         self.profile_data = profile_data
         self.gpu_cluster = gpu_cluster
         self.plan = plan
         self.rank_device_map = self._get_device_placement(plan.node_sequence)
         self.total_devices = gpu_cluster.get_total_num_devices()
+        self.min_bs = min_bs
 
     def _get_device_placement(self, node_sequence: List[DeviceType]) -> Dict[int, str]:
         rank_device_map = dict()
@@ -68,8 +69,8 @@ class StagePerformance:
                 hetero_device_group = True
 
             if hetero_device_group:
-                data_load_balancer = DataLoadBalancer(self.profile_data, self.model_config)
-                hetero_bs = data_load_balancer.partition_data(device_types, intra_strategy, gbs // batches // dp_deg) #! TODO: Check this
+                data_load_balancer = DataLoadBalancer(self.profile_data, self.model_config, self.min_bs)
+                hetero_bs = data_load_balancer.partition_data(device_types, intra_strategy, gbs // batches)
 
                 execution_costs = self._get_hetero_device_group_execution_time(device_types, intra_strategy, hetero_bs)
                 cur_performance = 0

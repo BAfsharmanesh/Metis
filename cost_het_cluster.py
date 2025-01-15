@@ -28,7 +28,7 @@ def cost_het_cluster(args: argparse.Namespace, gpu_cluster: GPUCluster, profile_
                                                     max_permute_len=args.max_permute_len):
 
         print(f'\n\ninter_stage_plan: {inter_stage_plan}')
-        stage_performance = StagePerformance(model_config, profile_data, gpu_cluster, inter_stage_plan)
+        stage_performance = StagePerformance(model_config, profile_data, gpu_cluster, inter_stage_plan, args.min_profiled_batch_size)
         rank_device_map = stage_performance.get_device_placement()
 
         intra_stage_plan_generator = IntraStagePlanGenerator(inter_stage_plan, stage_performance, layer_load_balancer,

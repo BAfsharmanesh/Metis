@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExec
 from cost_het_cluster import get_estimated_cost
 from parallelization.utils import call_silently
 from typing import List, Dict, Any
+from parallelization.workload import Arguments
 
 
 class Task:
@@ -12,13 +13,13 @@ class Task:
     Represents a single task to calculate the estimated cost for a given set of arguments.
     """
 
-    def __init__(self, args):
+    def __init__(self, id: int, args: Arguments):
         """
         Initializes the task with its arguments.
         """
         self.args = args
         self.result = None
-        self.id = args.id
+        self.id = id
 
     def _silent_func(self, args: Any) -> Any:
         return call_silently(get_estimated_cost)(args)
@@ -54,7 +55,7 @@ class TaskRunner:
         """
         return task.run()
 
-    def run_tasks(self) -> List[float]:
+    def run_tasks(self, verbose=False) -> List[float]:
         """
         Runs all tasks in parallel using ProcessPoolExecutor.
         Returns a list of results from the tasks.
@@ -72,8 +73,9 @@ class TaskRunner:
                 task = futures[future]
                 try:
                     result = future.result()
-                    results.append((task.id, result))
-                    print(f"Task finished successfully for args {task.args.id}")
+                    results.append((task.id, task.args.subset, result))
+                    if verbose:
+                        print(f"Task finished successfully for args {task.args.id}, {task.id}")
                 except Exception as e:
                     print(f"Task failed for args {task.args}: {e}")
         return results

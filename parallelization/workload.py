@@ -42,11 +42,12 @@ class Arguments:
     max_profiled_tp_degree: int
     max_profiled_batch_size: int
     min_profiled_batch_size: int
+    subset: Dict
     def __post_init__(self):
-        self.profile_data_path = os.path.join(self.home_dir, self.profile_data_path)
-        self.id = f"{self.model_name}_{self.model_size}_{self.gbs}"
+        self.profile_data_path = os.path.join(self.home_dir, self.profile_data_path)                
+        self.id = f"{self.model_name}_{self.model_size}_{self.gbs}_{list(self.subset.values())}"
         
-def get_arguments(model_info: ModelInfo, device_group_info: DeviceGroupInfo, job_info: JobInfo) -> Arguments:
+def get_arguments(model_info: ModelInfo, device_group_info: DeviceGroupInfo, job_info: JobInfo, subset) -> Arguments:
     return Arguments(model_name=model_info.model_name,
                      model_size=model_info.model_size,
                      home_dir=job_info.home_dir,
@@ -59,7 +60,8 @@ def get_arguments(model_info: ModelInfo, device_group_info: DeviceGroupInfo, job
                      max_permute_len=job_info.max_permute_len,
                      max_profiled_tp_degree=job_info.max_prof_tpd,
                      max_profiled_batch_size=job_info.max_prof_bs,
-                     min_profiled_batch_size=job_info.min_prof_bs)
+                     min_profiled_batch_size=job_info.min_prof_bs,
+                     subset=subset)
 
 
 # workloads
@@ -197,4 +199,73 @@ gpus_info = {
         "mem_bandwidth": 1008,
         "memory": 24,
     },
+}
+
+nodes_info = {
+    "IP1": {
+        "instance_type": "A6000",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A6000"]["memory"],
+    },
+    "IP2": {
+        "instance_type": "A100",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A100"]["memory"],
+    },
+    "IP3": {
+        "instance_type": "RTX4090",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["RTX4090"]["memory"],
+    },
+}
+
+nodes_info_hom_A100 = {
+    "IP1": {
+        "instance_type": "A100",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A100"]["memory"],
+    },
+    "IP2": {
+        "instance_type": "A100",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A100"]["memory"],
+    },
+    "IP3": {
+        "instance_type": "A100",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A100"]["memory"],
+    },
+}
+
+nodes_info_hom_A6000 = {
+    "IP1": {
+        "instance_type": "A6000",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A6000"]["memory"],
+    },
+    "IP2": {
+        "instance_type": "A6000",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A6000"]["memory"],
+    },
+    "IP3": {
+        "instance_type": "A6000",
+        "inter_bandwidth": 312500000.0,
+        "intra_bandwidth": 5312500000.0,
+        "memory": gpus_info["A6000"]["memory"],
+    },
+}
+
+host_entries = {
+    0: {"ip": "IP1", "num_device": 8},
+    1: {"ip": "IP2", "num_device": 8},
+    2: {"ip": "IP3", "num_device": 8},
 }

@@ -72,10 +72,10 @@ class LayerLoadBalancer:
                 )
             else:
                 data_load_balancer = DataLoadBalancer(
-                    self.profile_data, self.model_config
+                    self.profile_data, self.model_config, self.min_bs
                 )
                 hetero_bs = data_load_balancer.partition_data(
-                    device_types, strategy, gbs // batches // dp_deg # ! TODO: Check this
+                    device_types, strategy, gbs // batches
                 )
                 for h_mbs in hetero_bs:
                     comb_h_mbs = [
@@ -250,9 +250,10 @@ class LayerLoadBalancer:
 
 
 class DataLoadBalancer:
-    def __init__(self, profile_data: Dict, model_config):
+    def __init__(self, profile_data: Dict, model_config, min_bs: int = 1):
         self.profile_data = profile_data
         self.model_config = model_config
+        self.min_bs = min_bs
 
     def _get_execution_time(self, device_type: str, key: str) -> float:
         return sum(
@@ -268,9 +269,12 @@ class DataLoadBalancer:
 
         inner_stage_performance = []
         group_size = len(device_types) // dp_deg
+        # print(f"{device_types=}, {bs=}, {group_size=}")
+        # print(f"{self.model_config=}")
+        # print(f"{self.profile_data=}")
         for i in range(dp_deg):
             dp_group = device_types[i * group_size : (i + 1) * group_size]
-            profile_cost = self._get_execution_time(dp_group[0], f"tp{tp_deg}_bs1")
+            profile_cost = self._get_execution_time(dp_group[0], f"tp{tp_deg}_bs{self.min_bs}")
             inner_stage_performance.append(1.0 / profile_cost)
 
         inner_total_performance = sum(inner_stage_performance)

@@ -1,10 +1,8 @@
 profile_BU
 clusterfile_0.json
-clusterfile.json
-hostfile
-profile/
 logs/
 cluster/
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
