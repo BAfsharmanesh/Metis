@@ -83,7 +83,7 @@ models_info = [
     ModelInfo(model_name="llama2", model_size="26B", num_layers=80),
 ]
 
-home_dir = "/home/bahram/Projects/Metis/"
+home_dir = "/home/bahram/projects/Metis/"
 moe_path = "profile/metis/moe"
 wresnet_path = "profile/metis/wresnet"
 llama2_path = "profile/metis/llama2"

@@ -3,6 +3,8 @@ clusterfile_0.json
 logs/
 cluster/
 outputs/
+profile
+parallelization/outputs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

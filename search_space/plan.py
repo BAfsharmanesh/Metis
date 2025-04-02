@@ -239,6 +239,7 @@ class IntraStagePlanGenerator:
     def _is_valid_strategies(self, strategies: List[Tuple[int, int]]) -> bool:
         for dp_deg, tp_deg in strategies:
             mbs = self.gbs // dp_deg // self.batches
+            print(f'{dp_deg=}, {tp_deg=}, {mbs=}, {self.max_bs=}, {self.min_bs=}, {self.max_tp_degree=}, {self.batches=}, {self.gbs=}')
             if mbs == 0 or mbs > self.max_bs or mbs < self.min_bs:
                 # log for debugging
                 print(f'invalid_strategy: dp_deg({dp_deg}), batches({self.batches}), mbs(0)')

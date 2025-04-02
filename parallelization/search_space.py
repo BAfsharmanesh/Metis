@@ -25,7 +25,8 @@ def find_gpu_subsets_optimized(gpu_list: List[Tuple], min_memory: float, max_mem
     Example usage:
         gpu_list = [(8, 48), (8, 48), (8, 48)]  # 8*GPU1 with 48Gb memory, 8*GPU2 with 48Gb memory, 8*GPU3 with 48Gb memory
         min_memory = 768  
-        result = find_gpu_subsets_optimized(gpu_list, min_memory)    
+        max_memory = 1536
+        result = find_gpu_subsets_optimized(gpu_list, min_memory, max_memory)    
     """
 
     def is_power_of_two(x):
@@ -73,5 +74,16 @@ def find_gpu_subsets_optimized(gpu_list: List[Tuple], min_memory: float, max_mem
                 del subset[node]       
     return find_unique(valid_subsets)
 
+
+if __name__ == "__main__":
+    gpu_list = [(4, 32), (4, 24)]
+    min_mem = 20
+    result = find_gpu_subsets_optimized(gpu_list, min_memory=min_mem, max_memory=min_mem*3)    
+    print(result)
+    for res in result:
+        total_mem = 0
+        for node, count in res.items():
+            total_mem += count * gpu_list[node][1]
+        print(f"Node: {res}, Total memory: {total_mem}, GPU count: {sum(res.values())}")
 
 
