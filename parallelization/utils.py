@@ -90,6 +90,7 @@ def extract_tp_bs(filename):
 
 
 def manipulate_write_new_file(json_file_path, new_file_path):
+    """Manipulate the JSON file and write to a new path."""
     json_file_path = Path(json_file_path)
 
     tp_tmp, bs_tmp = extract_tp_bs(json_file_path.name)

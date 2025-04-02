@@ -29,12 +29,12 @@ def rename_files(base_dir):
                 os.makedirs(new_folder, exist_ok=True)  # Create the folder if it doesn't exist
                 new_path = os.path.join(new_folder, rest)  # e.g., "DeviceType.A6000_tp1_bs4.json"
 
-                manipulate_write_new_file(old_path, new_path)
-                create_dummy_profile(old_path, new_path)
+                manipulate_write_new_file(old_path, new_path) # apply corrections (if needed) to the file and write it to the new path
+                create_dummy_profile(old_path, new_path) # create a dummy profile for the new file
 
             else:
                 print(f"Skipped: {file}")
 
 if __name__ == "__main__":
-    base_directory = "profile"  # Change this to your base directory
+    base_directory = "test"  # Change this to your base directory
     rename_files(base_directory)

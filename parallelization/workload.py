@@ -84,9 +84,10 @@ models_info = [
 ]
 
 home_dir = "/home/bahram/projects/Metis/"
-moe_path = "profile/metis/moe"
-wresnet_path = "profile/metis/wresnet"
-llama2_path = "profile/metis/llama2"
+root_path = "profile_test/metis"
+moe_path = root_path+"/moe"
+wresnet_path = root_path+"/wresnet"
+llama2_path = root_path+"/llama2"
 
 jobs_info = {
     "moe_380M": JobInfo(

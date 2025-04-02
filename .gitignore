@@ -5,6 +5,7 @@ cluster/
 outputs/
 profile
 parallelization/outputs
+profile_test
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

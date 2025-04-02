@@ -121,6 +121,9 @@ def test_a_sample(models_info, jobs_info, host_entries, nodes_info):
     print(res)
 
 if __name__ == "__main__":
+    
+    output_file_name = "results_hom_A100.pkl"
+    out_put_path = "./parallelization/outputs/"
 
     device_info = [
         (v["num_device"], nodes_info_hom_A100[v["ip"]]["memory"])
@@ -150,8 +153,8 @@ if __name__ == "__main__":
             toc = time.time()
             print(f"Time: {toc-tic:.2f} sec")
 
-    out_put_path = "./parallelization/outputs/"
+    
     if not os.path.exists(out_put_path):
         os.makedirs(out_put_path)
-    with open(out_put_path+"results_hom_A100.pkl", "wb") as f:
+    with open(out_put_path+output_file_name, "wb") as f:
         pickle.dump(gather_results, f)
