@@ -1,52 +1,11 @@
 import os
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
+from parallelization.core.data_model import (Arguments, DeviceGroupInfo,
+                                             JobInfo, ModelInfo)
 
 
-@dataclass
-class ModelInfo:
-    model_name: str
-    model_size: str
-    num_layers: int
-    def __post_init__(self):
-        self.id = f"{self.model_name}_{self.model_size}"
-
-@dataclass
-class DeviceGroupInfo:
-    host_entries: Dict
-    nodes_info: Dict
-
-@dataclass
-class JobInfo:
-    home_dir: str    
-    profile_path: str
-    gbs: int
-    max_prof_bs: int
-    min_group_scale_variance: float = 1
-    max_permute_len: int = 4
-    max_prof_tpd: int = 1
-    min_prof_bs: int = 1
-
-@dataclass
-class Arguments:
-    model_name: str
-    model_size: str
-    home_dir: str  
-    host_entries: Dict
-    nodes_info: Dict
-    profile_data_path: str
-    gbs: int
-    num_layers: int
-    min_group_scale_variance: float
-    max_permute_len: int
-    max_profiled_tp_degree: int
-    max_profiled_batch_size: int
-    min_profiled_batch_size: int
-    subset: Dict
-    def __post_init__(self):
-        self.profile_data_path = os.path.join(self.home_dir, self.profile_data_path)                
-        self.id = f"{self.model_name}_{self.model_size}_{self.gbs}_{list(self.subset.values())}"
-        
 def get_arguments(model_info: ModelInfo, device_group_info: DeviceGroupInfo, job_info: JobInfo, subset) -> Arguments:
     return Arguments(model_name=model_info.model_name,
                      model_size=model_info.model_size,

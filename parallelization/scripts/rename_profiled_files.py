@@ -1,7 +1,10 @@
 import os
 import re
 import shutil
-from parallelization.utils import manipulate_write_new_file, create_dummy_profile
+
+from parallelization.core.utils import (create_dummy_profile,
+                                        manipulate_write_new_file)
+
 
 def copy_2_new_path(old_path, new_path):
     if (old_path == new_path) or os.path.exists(new_path):
@@ -19,22 +22,33 @@ def rename_files(base_dir):
             match = re.match(r"(.*)_(\d+(?:\.\d+)?[MB])_(DeviceType\..*\.json)", file)
             if match:
                 prefix, size, rest = match.groups()
-                
+
                 # Extract the base folder name (e.g., "wideresnet" -> "1B")
                 base_folder = size
-                
+
                 # Construct the new file path
                 old_path = os.path.join(root, file)
-                new_folder = os.path.join(root, size)  # e.g., "profile/merged_wresnet/1B"
-                os.makedirs(new_folder, exist_ok=True)  # Create the folder if it doesn't exist
-                new_path = os.path.join(new_folder, rest)  # e.g., "DeviceType.A6000_tp1_bs4.json"
+                new_folder = os.path.join(
+                    root, size
+                )  # e.g., "profile/merged_wresnet/1B"
+                os.makedirs(
+                    new_folder, exist_ok=True
+                )  # Create the folder if it doesn't exist
+                new_path = os.path.join(
+                    new_folder, rest
+                )  # e.g., "DeviceType.A6000_tp1_bs4.json"
 
-                manipulate_write_new_file(old_path, new_path) # apply corrections (if needed) to the file and write it to the new path
-                create_dummy_profile(old_path, new_path) # create a dummy profile for the new file
+                manipulate_write_new_file(
+                    old_path, new_path
+                )  # apply corrections (if needed) to the file and write it to the new path
+                create_dummy_profile(
+                    old_path, new_path
+                )  # create a dummy profile for the new file
 
             else:
                 print(f"Skipped: {file}")
 
+
 if __name__ == "__main__":
-    base_directory = "test"  # Change this to your base directory
-    rename_files(base_directory)
+    BASE_DIRECTORY = "test"  # Change this to your base directory
+    rename_files(BASE_DIRECTORY)

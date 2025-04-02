@@ -3,20 +3,23 @@ import json
 import os
 import pickle
 import time
+from typing import Any, Dict, List
 
 from cost_het_cluster import get_estimated_cost
-from parallelization.search_space import find_gpu_subsets_optimized
-from parallelization.task_runner import Task, TaskRunner
-from parallelization.workload import (
+from parallelization.core.search_space import find_gpu_subsets_optimized
+from parallelization.core.task_runner import Task, TaskRunner
+from parallelization.core.workload import (
     Arguments,
     DeviceGroupInfo,
-    ModelInfo,
     JobInfo,
+    ModelInfo,
     get_arguments,
     host_entries,
     jobs_info,
     models_info,
-    nodes_info, nodes_info_hom_A100, nodes_info_hom_A6000
+    nodes_info,
+    nodes_info_hom_A100,
+    nodes_info_hom_A6000,
 )
 
 
@@ -33,9 +36,24 @@ def get_sub_host_nodes(subset, host_entries, nodes_info):
 
 
 def calculate_result_for_job(
-    model_info: ModelInfo, job_info: JobInfo, device_info: list, max_workers: int
-):
+    model_info: ModelInfo, job_info: JobInfo, device_info: List, max_workers: int
+) -> List:
+    """
+    Evaluate model execution costs across different GPU cluster configurations.
 
+    This function finds optimal GPU subsets based on memory demands, creates tasks
+    to estimate execution costs for each subset, and returns detailed results.
+
+    Args:
+        model_info: Information about the model being executed
+        job_info: Information about the job configuration
+        device_info: List of available devices with their memory
+        max_workers: Maximum number of parallel workers for cost estimation
+
+    Returns:
+        List of results containing GPU subsets and their corresponding cost estimations
+    """
+    
     profile_path = os.path.join(job_info.home_dir, job_info.profile_path)
     instance_type = list(nodes_info.values())[0]["instance_type"]
     profile_path_min = os.path.join(
@@ -107,6 +125,7 @@ def calculate_result_for_job(
 
     return final_results
 
+
 def test_a_sample(models_info, jobs_info, host_entries, nodes_info):
     model_info = models_info[4]
     print(model_info.model_name)
@@ -120,10 +139,11 @@ def test_a_sample(models_info, jobs_info, host_entries, nodes_info):
     res = get_estimated_cost(args)
     print(res)
 
+
 if __name__ == "__main__":
-    
-    output_file_name = "results_hom_A100.pkl"
-    out_put_path = "./parallelization/outputs/"
+
+    OUT_PUT_PATH = "./parallelization/outputs/"
+    OUTPUT_FILE_NAME = "results_hom_A100.pkl"
 
     device_info = [
         (v["num_device"], nodes_info_hom_A100[v["ip"]]["memory"])
@@ -145,7 +165,9 @@ if __name__ == "__main__":
             print(f"Batch Size: {gbs}")
             tic = time.time()
             try:
-                final_results = calculate_result_for_job(model_info, job_info, device_info, max_workers=12)
+                final_results = calculate_result_for_job(
+                    model_info, job_info, device_info, max_workers=12
+                )
                 gather_results.append([model_info.id, gbs, final_results])
             except Exception as e:
                 print(f"Error: {e}")
@@ -153,8 +175,7 @@ if __name__ == "__main__":
             toc = time.time()
             print(f"Time: {toc-tic:.2f} sec")
 
-    
-    if not os.path.exists(out_put_path):
-        os.makedirs(out_put_path)
-    with open(out_put_path+output_file_name, "wb") as f:
+    if not os.path.exists(OUT_PUT_PATH):
+        os.makedirs(OUT_PUT_PATH)
+    with open(OUT_PUT_PATH + OUTPUT_FILE_NAME, "wb") as f:
         pickle.dump(gather_results, f)

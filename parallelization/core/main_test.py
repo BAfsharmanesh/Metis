@@ -5,9 +5,9 @@ import pickle
 import time
 
 from cost_het_cluster import get_estimated_cost
-from parallelization.search_space import find_gpu_subsets_optimized
-from parallelization.task_runner import Task, TaskRunner
-from parallelization.workload import (
+from parallelization.core.search_space import find_gpu_subsets_optimized
+from parallelization.core.task_runner import Task, TaskRunner
+from parallelization.core.workload import (
     Arguments,
     DeviceGroupInfo,
     ModelInfo,
@@ -19,7 +19,7 @@ from parallelization.workload import (
     nodes_info, nodes_info_hom_A100, nodes_info_hom_A6000
 )
 
-from parallelization.main import calculate_result_for_job, get_sub_host_nodes
+from parallelization.core.main import calculate_result_for_job, get_sub_host_nodes
 
 def run_all_possible_permutations():
     device_info = [

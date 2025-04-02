@@ -3,9 +3,9 @@ import subprocess
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from cost_het_cluster import get_estimated_cost
-from parallelization.utils import call_silently
+from parallelization.core.utils import call_silently
 from typing import List, Dict, Any
-from parallelization.workload import Arguments
+from parallelization.core.workload import Arguments
 
 
 class Task:
