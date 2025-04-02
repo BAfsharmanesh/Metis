@@ -13,6 +13,16 @@ from parallelization.core.workload import gpus_info
 
 # Suppress the output
 def call_silently(func):
+    """
+    Decorator to suppress stdout output from a function.
+
+    Args:
+        func: The function whose output should be suppressed
+
+    Returns:
+        Wrapped function that executes silently
+    """
+
     def wrapper(*args, **kwargs):
         with StringIO() as f, redirect_stdout(f):
             return func(*args, **kwargs)
@@ -20,8 +30,16 @@ def call_silently(func):
     return wrapper
 
 
-
 def json_2_model(json_data):
+    """
+    Convert JSON data to a structured ModelMetrics object.
+
+    Args:
+        json_data: Dictionary containing model data from JSON
+
+    Returns:
+        ModelMetrics object with parsed data
+    """
     parameters = Parameters(**json_data["model"]["parameters"])
     model = Model(
         model_name=json_data["model"]["model_name"],
@@ -37,6 +55,15 @@ def json_2_model(json_data):
 
 
 def read_json_file(file_name):
+    """
+    Read and parse a JSON file into a Python dictionary.
+
+    Args:
+        file_name: Path to the JSON file
+
+    Returns:
+        Dictionary containing the parsed JSON data
+    """
     with open(file_name, "r") as f:
         data = json.load(f)
     return dict(data)
@@ -92,7 +119,7 @@ def create_dummy_profile(json_file_path, new_file_path):
         / gpus_info[profiled_gpus]["mem_bandwidth"]
         for gpu in new_gpus
     }
-    
+
     # print(f"{new_gpus_throughput=}")
 
     json_file_path = Path(json_file_path)
@@ -101,14 +128,23 @@ def create_dummy_profile(json_file_path, new_file_path):
     json_data = json_2_model(json_data)
 
     for gpu in new_gpus:
-        json_data.execution_time.total_time_ms = json_data.execution_time.total_time_ms/new_gpus_throughput[gpu]
-        json_data.execution_time.forward_backward_time_ms = json_data.execution_time.forward_backward_time_ms/new_gpus_throughput[gpu]
-        json_data.execution_time.batch_generator_time_ms = json_data.execution_time.batch_generator_time_ms/ new_gpus_throughput[gpu]
+        json_data.execution_time.total_time_ms = (
+            json_data.execution_time.total_time_ms / new_gpus_throughput[gpu]
+        )
+        json_data.execution_time.forward_backward_time_ms = (
+            json_data.execution_time.forward_backward_time_ms / new_gpus_throughput[gpu]
+        )
+        json_data.execution_time.batch_generator_time_ms = (
+            json_data.execution_time.batch_generator_time_ms / new_gpus_throughput[gpu]
+        )
         # json_data.execution_time.layernorm_grads_all_reduce_time_ms /= new_gpus_throughput[gpu]
         # json_data.execution_time.embedding_grads_all_reduce_time_ms /= new_gpus_throughput[gpu]
-        json_data.execution_time.optimizer_time_ms =  json_data.execution_time.optimizer_time_ms/new_gpus_throughput[gpu]
+        json_data.execution_time.optimizer_time_ms = (
+            json_data.execution_time.optimizer_time_ms / new_gpus_throughput[gpu]
+        )
         json_data.execution_time.layer_compute_total_ms = [
-            i / new_gpus_throughput[gpu] for i in json_data.execution_time.layer_compute_total_ms
+            i / new_gpus_throughput[gpu]
+            for i in json_data.execution_time.layer_compute_total_ms
         ]
         json_data_dump = json.dumps(asdict(json_data), indent=2)
 

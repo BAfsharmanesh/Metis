@@ -3,7 +3,9 @@ import json
 import os
 import pickle
 import time
-from typing import Any, Dict, List
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 from cost_het_cluster import get_estimated_cost
 from parallelization.core.search_space import find_gpu_subsets_optimized
@@ -15,167 +17,189 @@ from parallelization.core.workload import (
     ModelInfo,
     get_arguments,
     host_entries,
+    nodes_info,
     jobs_info,
     models_info,
-    nodes_info,
-    nodes_info_hom_A100,
-    nodes_info_hom_A6000,
+    # nodes_info_hom_A100,
+    # nodes_info_hom_A6000,    
 )
 
+# Type aliases
+SubsetType = Dict[int, int]
+DeviceInfoType = List[Tuple[int, float]]
+ResultType = List[Tuple[SubsetType, Optional[List[Any]]]]
 
-def get_sub_host_nodes(subset, host_entries, nodes_info):
-    sub_host_entries = {}
-    sub_nodes_info = {}
-    for i, (node, count) in enumerate(subset.items()):
-        assert count > 0, "count should be greater than 0"
-        sub_host_entries[i] = copy.deepcopy(host_entries[node])
-        sub_host_entries[i]["num_device"] = count
-        ip = host_entries[node]["ip"]
-        sub_nodes_info[ip] = nodes_info[ip]
-    return sub_host_entries, sub_nodes_info
+@dataclass
+class Config:
+    """Configuration for cost estimation runs"""
+    output_path: Path = Path("./parallelization/outputs/")
+    output_filename: str = "results_hom_A100.pkl"
+    max_workers: int = 12
+    job_batch_sizes: Dict[str, List[int]] = None
+    host_entries: Dict = None
+    nodes_info: Dict = None 
+    models_info: Dict = None
+    jobs_info: Dict = None
 
+    def __post_init__(self):
+        if self.job_batch_sizes is None:
+            self.job_batch_sizes = {
+                "llama2": [128, 256, 512],
+                "wresnet": [256, 512, 1024], 
+                "moe": [256, 512, 1024],
+            }
+        if any(x is None for x in [self.host_entries, self.nodes_info, self.models_info, self.jobs_info]):
+            raise ValueError("host_entries, nodes_info, models_info and jobs_info must be provided")
 
-def calculate_result_for_job(
-    model_info: ModelInfo, job_info: JobInfo, device_info: List, max_workers: int
-) -> List:
-    """
-    Evaluate model execution costs across different GPU cluster configurations.
-
-    This function finds optimal GPU subsets based on memory demands, creates tasks
-    to estimate execution costs for each subset, and returns detailed results.
-
-    Args:
-        model_info: Information about the model being executed
-        job_info: Information about the job configuration
-        device_info: List of available devices with their memory
-        max_workers: Maximum number of parallel workers for cost estimation
-
-    Returns:
-        List of results containing GPU subsets and their corresponding cost estimations
-    """
+class ClusterManager:
+    """Manages cluster configuration and subset operations"""
     
-    profile_path = os.path.join(job_info.home_dir, job_info.profile_path)
-    instance_type = list(nodes_info.values())[0]["instance_type"]
-    profile_path_min = os.path.join(
-        profile_path, f"DeviceType.{instance_type}_tp{1}_bs{job_info.min_prof_bs}.json"
-    )
-    profile_path_max = os.path.join(
-        profile_path, f"DeviceType.{instance_type}_tp{1}_bs{job_info.max_prof_bs}.json"
-    )
+    @staticmethod
+    def get_sub_host_nodes(
+        subset: SubsetType,
+        host_entries: Dict,
+        nodes_info: Dict
+    ) -> Tuple[Dict, Dict]:
+        """Extract a subset of host nodes based on specified GPU allocation."""
+        sub_host_entries = {}
+        sub_nodes_info = {}
+        
+        for i, (node, count) in enumerate(subset.items()):
+            if count <= 0:
+                raise ValueError("GPU count must be greater than 0")
+                
+            sub_host_entries[i] = copy.deepcopy(host_entries[node])
+            sub_host_entries[i]["num_device"] = count
+            ip = host_entries[node]["ip"]
+            sub_nodes_info[ip] = nodes_info[ip]
+            
+        return sub_host_entries, sub_nodes_info
 
-    # read json file as dictionary
+class MemoryProfiler:
+    """Handles memory profiling and requirements calculation"""
+    
+    @staticmethod
+    def get_memory_requirements(
+        job_info: JobInfo,
+        profile_path: str,
+        instance_type: str
+    ) -> List[float]:
+        """Calculate memory requirements from profile data"""
+        
+        def read_memory_from_profile(path: str) -> float:
+            with open(path, "r") as f:
+                memory = json.load(f)["execution_memory"]["total_memory_mb"]
+                return int(memory) / 1024.0
 
-    with open(profile_path_min, "r") as f:
-        min_memory = json.load(f)["execution_memory"]["total_memory_mb"]
-        min_memory = int(min_memory) / 1024.0
-        # print(min_memory, min_memory / job_info.min_prof_bs * job_info.gbs)
-    with open(profile_path_max, "r") as f:
-        max_memory = json.load(f)["execution_memory"]["total_memory_mb"]
-        max_memory = int(max_memory) / 1024.0
-        # print(max_memory, max_memory / job_info.max_prof_bs * job_info.gbs)
-    # find the optimal gpu subsets
-    memory_demand = sorted(
-        [
+        profile_path_min = os.path.join(
+            profile_path, 
+            f"DeviceType.{instance_type}_tp{1}_bs{job_info.min_prof_bs}.json"
+        )
+        profile_path_max = os.path.join(
+            profile_path,
+            f"DeviceType.{instance_type}_tp{1}_bs{job_info.max_prof_bs}.json"
+        )
+
+        min_memory = read_memory_from_profile(profile_path_min)
+        max_memory = read_memory_from_profile(profile_path_max)
+        
+        return sorted([
             min_memory,
             max_memory,
             min_memory / job_info.min_prof_bs * job_info.gbs,
             max_memory / job_info.max_prof_bs * job_info.gbs,
-        ]
-    )
-    # print(memory_demand)
-    cluster_subset = find_gpu_subsets_optimized(
-        device_info, min(memory_demand), max(memory_demand)
-    )
-    print(
-        f"Perform the job {model_info.id} for {len(cluster_subset)} subsets of the cluster"
-    )
+        ])
 
-    tasks = []
-    args_list = []
-    for i, subset in enumerate(cluster_subset):
-        sub_host_entries, sub_nodes_info = get_sub_host_nodes(
-            subset, host_entries, nodes_info
+class CostEstimator:
+    """Handles cost estimation for different cluster configurations"""
+    
+    def __init__(self, config: Config):
+        self.config = config
+
+    def calculate_result_for_job(
+        self,
+        model_info: ModelInfo,
+        job_info: JobInfo,
+        device_info: DeviceInfoType,
+    ) -> ResultType:
+        """Evaluate model execution costs across different GPU cluster configurations."""
+        
+        # Get memory requirements
+        profile_path = os.path.join(job_info.home_dir, job_info.profile_path)
+        instance_type = list(self.config.nodes_info.values())[0]["instance_type"]
+        memory_demand = MemoryProfiler.get_memory_requirements(
+            job_info, profile_path, instance_type
         )
-        device_group_info = DeviceGroupInfo(sub_host_entries, sub_nodes_info)
 
-        args = get_arguments(model_info, device_group_info, job_info, subset)
+        # Find optimal GPU subsets
+        cluster_subset = find_gpu_subsets_optimized(
+            device_info, min(memory_demand), max(memory_demand)
+        )
+        print(f"Evaluating job {model_info.id} for {len(cluster_subset)} cluster subsets")
 
-        tasks.append(Task(i, args))
-        args_list.append(args)
+        # Prepare tasks
+        tasks = []
+        for i, subset in enumerate(cluster_subset):
+            sub_host_entries, sub_nodes_info = ClusterManager.get_sub_host_nodes(
+                subset, self.config.host_entries, self.config.nodes_info
+            )
+            device_group_info = DeviceGroupInfo(sub_host_entries, sub_nodes_info)
+            args = get_arguments(model_info, device_group_info, job_info, subset)
+            tasks.append(Task(i, args))
 
-    # Create and run the TaskRunner
-    runner = TaskRunner(
-        tasks, max_workers=max_workers
-    )  # Adjust max_workers for your CPU
-    results = runner.run_tasks()
-    # args = Arguments(model_name='llama2', model_size='26B', home_dir='/home/bahram/Projects/Metis/', host_entries={0: {'ip': 'IP1', 'num_device': 2}, 1: {'ip': 'IP2', 'num_device': 5}, 2: {'ip': 'IP3', 'num_device': 1}}, nodes_info={'IP1': {'instance_type': 'A6000', 'inter_bandwidth': 312500000.0, 'intra_bandwidth': 5312500000.0, 'memory': 48}, 'IP2': {'instance_type': 'A100', 'inter_bandwidth': 312500000.0, 'intra_bandwidth': 5312500000.0, 'memory': 80}, 'IP3': {'instance_type': 'RTX4090', 'inter_bandwidth': 312500000.0, 'intra_bandwidth': 5312500000.0, 'memory': 24}}, profile_data_path='/home/bahram/Projects/Metis/profile/metis/llama2/26B', gbs=128, num_layers=80, min_group_scale_variance=1, max_permute_len=4, max_profiled_tp_degree=8, max_profiled_batch_size=4, min_profiled_batch_size=1)
-    # args = args_list[-1]
-    # results = get_estimated_cost(args)
-    results = {item[0]: [item[1], item[2]] for item in results}
-    final_results = []
-    for i, subset in enumerate(cluster_subset):
-        if i in results.keys():
-            if results[i][1] is not None:
-                # print(f"{i} subset: {subset}, Estimated Cost: {results[i][1][6]:.2f}, Strategy: {results[i][1][2]}")
-                final_results.append([subset, results[i]])
-            else:
-                final_results.append([subset, None])
-        else:
-            final_results.append([subset, None])
+        # Run tasks and process results
+        runner = TaskRunner(tasks, max_workers=self.config.max_workers)
+        results = runner.run_tasks()
+        results_dict = {item[0]: [item[1], item[2]] for item in results}
+        
+        return [
+            [subset, results_dict.get(i, [None, None])]
+            for i, subset in enumerate(cluster_subset)
+        ]
 
-    return final_results
-
-
-def test_a_sample(models_info, jobs_info, host_entries, nodes_info):
-    model_info = models_info[4]
-    print(model_info.model_name)
-    job_info = jobs_info[model_info.id]
-    subset = {0: 4, 1: 4}
-    sub_host_entries, sub_nodes_info = get_sub_host_nodes(
-        subset, host_entries, nodes_info
-    )
-    device_group_info = DeviceGroupInfo(sub_host_entries, sub_nodes_info)
-    args = get_arguments(model_info, device_group_info, job_info, subset)
-    res = get_estimated_cost(args)
-    print(res)
-
-
-if __name__ == "__main__":
-
-    OUT_PUT_PATH = "./parallelization/outputs/"
-    OUTPUT_FILE_NAME = "results_hom_A100.pkl"
-
+def run_cost_estimation(
+    config: Config
+) -> None:
+    """Main function to run cost estimation across all models and batch sizes"""
+    
     device_info = [
-        (v["num_device"], nodes_info_hom_A100[v["ip"]]["memory"])
-        for k, v in host_entries.items()
+        (v["num_device"], config.nodes_info[v["ip"]]["memory"])
+        for k, v in config.host_entries.items()
     ]
-    # job batch size
-    job_batch_size = {
-        "llama2": [128, 256, 512],
-        "wresnet": [256, 512, 1024],
-        "moe": [256, 512, 1024],
-    }
+    
+    estimator = CostEstimator(config)
+    results = []
 
-    gather_results = []
-    for model_info in models_info:
-        job_info = jobs_info[model_info.id]
-        print(f"Model: {model_info.id}")
-        for gbs in job_batch_size[model_info.model_name]:
+    for model_info in config.models_info:
+        job_info = config.jobs_info[model_info.id]
+        print(f"Processing Model: {model_info.id}")
+        
+        for gbs in config.job_batch_sizes[model_info.model_name]:
             job_info.gbs = gbs
             print(f"Batch Size: {gbs}")
-            tic = time.time()
+            
             try:
-                final_results = calculate_result_for_job(
-                    model_info, job_info, device_info, max_workers=12
+                tic = time.time()
+                final_results = estimator.calculate_result_for_job(
+                    model_info, job_info, device_info
                 )
-                gather_results.append([model_info.id, gbs, final_results])
+                results.append([model_info.id, gbs, final_results])
+                print(f"Time: {time.time() - tic:.2f} sec")
             except Exception as e:
-                print(f"Error: {e}")
-                gather_results.append([model_info.id, gbs, None])
-            toc = time.time()
-            print(f"Time: {toc-tic:.2f} sec")
+                print(f"Error processing {model_info.id} with batch size {gbs}: {e}")
+                results.append([model_info.id, gbs, None])
 
-    if not os.path.exists(OUT_PUT_PATH):
-        os.makedirs(OUT_PUT_PATH)
-    with open(OUT_PUT_PATH + OUTPUT_FILE_NAME, "wb") as f:
-        pickle.dump(gather_results, f)
+    # Save results
+    config.output_path.mkdir(parents=True, exist_ok=True)
+    output_file = config.output_path / config.output_filename
+    with open(output_file, "wb") as f:
+        pickle.dump(results, f)
+
+if __name__ == "__main__":
+    config = Config(job_batch_sizes=None,
+                    host_entries=host_entries,
+                    nodes_info=nodes_info,
+                    models_info=models_info,
+                    jobs_info=jobs_info)
+    # Run cost estimation
+    run_cost_estimation(config)

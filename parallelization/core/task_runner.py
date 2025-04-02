@@ -39,12 +39,18 @@ class Task:
 
 class TaskRunner:
     """
-    Manages and runs multiple tasks in parallel using ProcessPoolExecutor.
+    Manages the parallel execution of cost estimation tasks across multiple configurations.
+
+    This class handles the distribution of tasks to a thread pool and collects results.
     """
 
     def __init__(self, tasks: List[Task], max_workers: int = 4):
         """
-        Initializes the TaskRunner with a list of tasks and worker count.
+        Initialize a TaskRunner with tasks and worker configuration.
+
+        Args:
+            tasks: List of Task objects to be executed
+            max_workers: Maximum number of parallel workers
         """
         self.tasks = tasks
         self.max_workers = max_workers
@@ -57,8 +63,10 @@ class TaskRunner:
 
     def run_tasks(self, verbose=False) -> List[float]:
         """
-        Runs all tasks in parallel using ProcessPoolExecutor.
-        Returns a list of results from the tasks.
+        Execute all tasks in parallel and gather results.
+
+        Returns:
+            List of results from completed tasks
         """
         print(
             f"Running {len(self.tasks)} tasks with {self.max_workers} workers (processes)..."
@@ -75,7 +83,9 @@ class TaskRunner:
                     result = future.result()
                     results.append((task.id, task.args.subset, result))
                     if verbose:
-                        print(f"Task finished successfully for args {task.args.id}, {task.id}")
+                        print(
+                            f"Task finished successfully for args {task.args.id}, {task.id}"
+                        )
                 except Exception as e:
                     print(f"Task failed for args {task.args}: {e}")
         return results

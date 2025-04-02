@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
+from pathlib import Path 
 
 
 @dataclass
@@ -46,9 +47,10 @@ class ModelInfo:
     model_name: str
     model_size: str
     num_layers: int
-
-    def __post_init__(self):
-        self.id = f"{self.model_name}_{self.model_size}"
+    
+    @property
+    def id(self) -> str:
+        return f"{self.model_name}_{self.model_size}"
 
 
 @dataclass
@@ -59,11 +61,11 @@ class DeviceGroupInfo:
 
 @dataclass
 class JobInfo:
-    home_dir: str
-    profile_path: str
+    home_dir: Path  
+    profile_path: Path 
     gbs: int
     max_prof_bs: int
-    min_group_scale_variance: float = 1
+    min_group_scale_variance: float = 1.0
     max_permute_len: int = 4
     max_prof_tpd: int = 1
     min_prof_bs: int = 1
@@ -87,5 +89,8 @@ class Arguments:
     subset: Dict
 
     def __post_init__(self):
-        self.profile_data_path = os.path.join(self.home_dir, self.profile_data_path)
-        self.id = f"{self.model_name}_{self.model_size}_{self.gbs}_{list(self.subset.values())}"
+        self.profile_data_path = Path(self.home_dir) / self.profile_data_path
+
+    @property
+    def id(self) -> str:
+        return f"{self.model_name}_{self.model_size}_{self.gbs}_{list(self.subset.values())}"
