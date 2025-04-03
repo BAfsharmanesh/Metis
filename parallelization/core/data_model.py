@@ -5,6 +5,15 @@ from pathlib import Path
 
 
 @dataclass
+class GPUAllocation:
+    node_allocations: Dict[int, int]
+    total_memory: int
+    total_gpus: int
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.node_allocations.items())))
+
+@dataclass
 class Parameters:
     total_parameters_bytes: int
     parameters_per_layer_bytes: List[int]
@@ -94,3 +103,26 @@ class Arguments:
     @property
     def id(self) -> str:
         return f"{self.model_name}_{self.model_size}_{self.gbs}_{list(self.subset.values())}"
+    
+    
+    
+# task_runner.py
+
+@dataclass(frozen=True)
+class TaskResult:
+    """Represents the result of a task execution."""
+    task_id: int
+    subset: str
+    cost: Optional[float]
+    error: Optional[str] = None
+    
+    @property
+    def is_success(self) -> bool:
+        return self.error is None
+    
+    
+
+# workload.py
+
+
+    

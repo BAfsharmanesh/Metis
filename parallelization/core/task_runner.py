@@ -4,88 +4,69 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from cost_het_cluster import get_estimated_cost
 from parallelization.core.utils import call_silently
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Optional
 from parallelization.core.workload import Arguments
+from parallelization.core.data_model import TaskResult
 
 
+@dataclass(frozen=True)
 class Task:
-    """
-    Represents a single task to calculate the estimated cost for a given set of arguments.
-    """
+    """Represents a single cost estimation task."""
+    id: int
+    args: Arguments
 
-    def __init__(self, id: int, args: Arguments):
-        """
-        Initializes the task with its arguments.
-        """
-        self.args = args
-        self.result = None
-        self.id = id
+    def _execute_cost_estimation(self) -> Tuple[Optional[float], Optional[str]]:
+        """Execute the cost estimation and return result or error."""
+        try:
+            result = call_silently(get_estimated_cost)(self.args)
+            return (result[0] if result else None), None
+        except Exception as e:
+            return None, str(e)
 
-    def _silent_func(self, args: Any) -> Any:
-        return call_silently(get_estimated_cost)(args)
-
-    def run(self) -> float:
-        """
-        Executes the task by calling get_estimated_cost with the given arguments.
-        """
-        # print(f"Processing task with args: {self.args.id}")
-
-        self.result = self._silent_func(self.args)
-        # self.result = get_estimated_cost(self.args)
-        # print(f"Task completed for args {self.args.id}")
-
-        return self.result[0] if self.result else None
-
+    def run(self) -> TaskResult:
+        """Execute the task and return a TaskResult."""
+        cost, error = self._execute_cost_estimation()
+        return TaskResult(
+            task_id=self.id,
+            subset=self.args.subset,
+            cost=cost,
+            error=error
+        )
 
 class TaskRunner:
-    """
-    Manages the parallel execution of cost estimation tasks across multiple configurations.
-
-    This class handles the distribution of tasks to a thread pool and collects results.
-    """
+    """Manages parallel execution of cost estimation tasks."""
 
     def __init__(self, tasks: List[Task], max_workers: int = 4):
-        """
-        Initialize a TaskRunner with tasks and worker configuration.
-
-        Args:
-            tasks: List of Task objects to be executed
-            max_workers: Maximum number of parallel workers
-        """
         self.tasks = tasks
         self.max_workers = max_workers
 
-    def _run_single_task(self, task: Task) -> float:
-        """
-        Helper method to run a single task. Needed for ProcessPoolExecutor.
-        """
-        return task.run()
-
-    def run_tasks(self, verbose=False) -> List[float]:
-        """
-        Execute all tasks in parallel and gather results.
-
-        Returns:
-            List of results from completed tasks
-        """
-        print(
-            f"Running {len(self.tasks)} tasks with {self.max_workers} workers (processes)..."
-        )
-        results = []
+    def run_tasks(self, verbose: bool = False) -> List[TaskResult]:
+        """Execute all tasks in parallel and return results."""
+        print(f"Running {len(self.tasks)} tasks with {self.max_workers} workers (processes)...")
+        
+        results: List[TaskResult] = []
         with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {
-                executor.submit(self._run_single_task, task): task
+            future_to_task = {
+                executor.submit(task.run): task
                 for task in self.tasks
             }
-            for future in as_completed(futures):
-                task = futures[future]
+            
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
                 try:
                     result = future.result()
-                    results.append((task.id, task.args.subset, result))
-                    if verbose:
-                        print(
-                            f"Task finished successfully for args {task.args.id}, {task.id}"
-                        )
+                    results.append(result)
+                    if verbose and result.is_success:
+                        print(f"Task {task.id} completed successfully")
+                    elif not result.is_success:
+                        print(f"Task {task.id} failed: {result.error}, not is_success")
                 except Exception as e:
-                    print(f"Task failed for args {task.args}: {e}")
+                    print(f"Task {task.id} failed: {str(e)}, Exception")
+                    results.append(TaskResult(
+                        task_id=task.id,
+                        subset=task.args.subset,
+                        cost=None,
+                        error=f"Execution error: {str(e)}"
+                    ))
+                    
         return results

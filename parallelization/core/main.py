@@ -8,21 +8,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 from cost_het_cluster import get_estimated_cost
+from parallelization.core.data_model import TaskResult
 from parallelization.core.search_space import find_gpu_subsets_optimized
 from parallelization.core.task_runner import Task, TaskRunner
-from parallelization.core.workload import (
-    Arguments,
-    DeviceGroupInfo,
-    JobInfo,
-    ModelInfo,
-    get_arguments,
-    host_entries,
-    nodes_info,
-    jobs_info,
-    models_info,
-    # nodes_info_hom_A100,
-    # nodes_info_hom_A6000,    
-)
+from parallelization.core.workload import (DEFAULT_HOST_ENTRIES, Arguments,
+                                           DeviceGroupInfo, JobInfo,
+                                           ModelConfigurations, ModelInfo,
+                                           NodeConfigurations, get_arguments, GPUType)
 
 # Type aliases
 SubsetType = Dict[int, int]
@@ -149,13 +141,19 @@ class CostEstimator:
 
         # Run tasks and process results
         runner = TaskRunner(tasks, max_workers=self.config.max_workers)
-        results = runner.run_tasks()
-        results_dict = {item[0]: [item[1], item[2]] for item in results}
+        results: List[TaskResult] = runner.run_tasks(verbose=False)
+        # Create a mapping of task results for easier lookup
+        results_by_task = {
+            result.task_id: (result.subset, result.cost) 
+            for result in results
+        }
         
+        # Map each cluster subset to its corresponding result
         return [
-            [subset, results_dict.get(i, [None, None])]
+            (subset, results_by_task.get(i, (None, None)))
             for i, subset in enumerate(cluster_subset)
         ]
+
 
 def run_cost_estimation(
     config: Config
@@ -196,8 +194,12 @@ def run_cost_estimation(
         pickle.dump(results, f)
 
 if __name__ == "__main__":
+    jobs_info = ModelConfigurations.get_job_configs()
+    models_info = ModelConfigurations.get_model_configs()
+    nodes_info = NodeConfigurations.get_homogeneous_config(GPUType.A100)
+    
     config = Config(job_batch_sizes=None,
-                    host_entries=host_entries,
+                    host_entries=DEFAULT_HOST_ENTRIES,
                     nodes_info=nodes_info,
                     models_info=models_info,
                     jobs_info=jobs_info)

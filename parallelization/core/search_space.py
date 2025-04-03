@@ -1,16 +1,81 @@
-from math import log2
-from typing import List, Dict, Any, Tuple
-from itertools import combinations
-from collections import Counter
+from parallelization.core.data_model import GPUAllocation
+from typing import List, Dict, Tuple, Set
+from dataclasses import dataclass
 
-def find_unique(list):
-    unique_list = []
-    for x in list:
-        if x not in unique_list:
-            unique_list.append(x)
-    return unique_list 
+def is_power_of_two(x: int) -> bool:
+    """Check if a number is a power of 2."""
+    return x > 0 and (x & (x - 1)) == 0
 
-def find_gpu_subsets_optimized(gpu_list: List[Tuple], min_memory: float, max_memory: float) -> List[Dict[int, int]]:
+def validate_inputs(gpu_list: List[Tuple[int, int]], min_memory: float, max_memory: float) -> None:
+    """Validate input parameters."""
+    if not gpu_list:
+        raise ValueError("GPU list cannot be empty")
+    if min_memory <= 0:
+        raise ValueError("Minimum memory must be positive")
+    if max_memory < min_memory:
+        raise ValueError("Maximum memory must be greater than or equal to minimum memory")
+    
+def find_gpu_subsets_optimized(
+    gpu_list: List[Tuple[int, int]], 
+    min_memory: float, 
+    max_memory: float
+) -> List[Dict[int, int]]:
+    """Find valid GPU allocations across nodes that meet memory requirements.
+
+    Args:
+        gpu_list: List of tuples [(num_gpus, gpu_memory), ...] for each node
+        min_memory: Minimum total memory required
+        max_memory: Maximum total memory allowed
+        
+    Returns:
+        List of valid GPU allocations, where each allocation is a dict mapping
+        node index to number of GPUs to use from that node.
+        
+    Example:
+        >>> gpu_list = [(8, 48), (8, 48)]  # Two nodes with 8 GPUs of 48GB each
+        >>> result = find_gpu_subsets_optimized(gpu_list, min_memory=768, max_memory=1536)
+    """
+    validate_inputs(gpu_list, min_memory, max_memory)
+    
+    def backtrack(index: int, current_memory: int, current_count: int, subset: Dict[int, int]) -> None:
+        if current_memory >= min_memory and is_power_of_two(current_count):
+            # Only store allocations with non-zero GPU counts
+            allocation = {k: v for k, v in subset.items() if v > 0}
+            if allocation:
+                valid_subsets.add(GPUAllocation(
+                    node_allocations=allocation,
+                    total_memory=current_memory,
+                    total_gpus=current_count
+                ))
+
+        if index == len(gpu_list) or current_memory >= max_memory:
+            return
+
+        num_gpus, gpu_memory = gpu_list[index]
+        for use_count in range(num_gpus + 1):
+            new_memory = current_memory + use_count * gpu_memory
+            if new_memory >= max_memory:
+                break
+
+            if use_count > 0:
+                subset[index] = use_count
+            backtrack(
+                index + 1,
+                new_memory,
+                current_count + use_count,
+                subset
+            )
+            if use_count > 0:
+                del subset[index]
+
+    valid_subsets: Set[GPUAllocation] = set()
+    backtrack(0, 0, 0, {})
+    
+    return [allocation.node_allocations for allocation in valid_subsets]
+
+
+
+def find_gpu_subsets_optimized_0(gpu_list: List[Tuple], min_memory: float, max_memory: float) -> List[Dict[int, int]]:
     """_summary_
 
     Args:
@@ -28,6 +93,12 @@ def find_gpu_subsets_optimized(gpu_list: List[Tuple], min_memory: float, max_mem
         max_memory = 1536
         result = find_gpu_subsets_optimized(gpu_list, min_memory, max_memory)    
     """
+    def find_unique(list):
+        unique_list = []
+        for x in list:
+            if x not in unique_list:
+                unique_list.append(x)
+        return unique_list     
 
     def is_power_of_two(x):
         return x > 0 and (x & (x - 1)) == 0
@@ -75,15 +146,28 @@ def find_gpu_subsets_optimized(gpu_list: List[Tuple], min_memory: float, max_mem
     return find_unique(valid_subsets)
 
 
-if __name__ == "__main__":
-    gpu_list = [(4, 32), (4, 24)]
+def main() -> None:
+    """Example usage of the GPU allocation function."""
+    gpu_list = [(4, 32), (4, 24)]  # Two nodes: 4 GPUs x 32GB and 4 GPUs x 24GB
     min_mem = 20
-    result = find_gpu_subsets_optimized(gpu_list, min_memory=min_mem, max_memory=min_mem*3)    
-    print(result)
-    for res in result:
-        total_mem = 0
-        for node, count in res.items():
-            total_mem += count * gpu_list[node][1]
-        print(f"Node: {res}, Total memory: {total_mem}, GPU count: {sum(res.values())}")
+    max_mem = min_mem * 3
+    
+    result = find_gpu_subsets_optimized(
+        gpu_list=gpu_list,
+        min_memory=min_mem,
+        max_memory=max_mem
+    )
+    
+    print("\nValid GPU Allocations:")
+    for allocation in result:
+        total_mem = sum(count * gpu_list[node][1] for node, count in allocation.items())
+        total_gpus = sum(allocation.values())
+        print(f"Allocation: {allocation}")
+        print(f"Total Memory: {total_mem}GB")
+        print(f"Total GPUs: {total_gpus}")
+        print("-" * 40)
+
+if __name__ == "__main__":
+    main()
 
 

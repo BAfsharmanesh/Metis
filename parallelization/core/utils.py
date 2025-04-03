@@ -8,7 +8,7 @@ from typing import Dict, List
 
 from parallelization.core.data_model import (ExecutionMemory, ExecutionTime,
                                              Model, ModelMetrics, Parameters)
-from parallelization.core.workload import gpus_info
+from parallelization.core.workload import GPUSpecs, GPUType
 
 
 # Suppress the output
@@ -72,83 +72,84 @@ def read_json_file(file_name):
 import re
 
 
-def extract_tp_bs(filename):
-    # Match the pattern for tp and bs
+def extract_tp_bs(filename: str) -> tuple[int, int]:
+    """
+    Extract tensor parallelism and batch size numbers from filename.
+    
+    Args:
+        filename: Input filename containing tp and bs numbers
+        
+    Returns:
+        Tuple of (tp_number, bs_number)
+        
+    Raises:
+        ValueError: If filename doesn't match expected pattern
+    """
     match = re.search(r"_tp(\d+)_bs(\d+)\.json", filename)
     if match:
-        tp_number = int(match.group(1))  # Extract tp number
-        bs_number = int(match.group(2))  # Extract bs number
-        return tp_number, bs_number
-    else:
-        raise ValueError("Filename does not match the expected pattern")
+        return int(match.group(1)), int(match.group(2)) # (tp_number, bs_number)
+    raise ValueError("Filename does not match the expected pattern")
 
 
-def manipulate_write_new_file(json_file_path, new_file_path):
-    """Manipulate the JSON file and write to a new path."""
+def manipulate_write_new_file(json_file_path: str | Path, new_file_path: str | Path) -> None:
+    """
+    Manipulate JSON file by scaling memory values and write to new path.
+    
+    Args:
+        json_file_path: Path to source JSON file
+        new_file_path: Path to write modified JSON
+    """
     json_file_path = Path(json_file_path)
-
-    tp_tmp, bs_tmp = extract_tp_bs(json_file_path.name)
-    json_data = read_json_file(json_file_path)
-    json_data = json_2_model(json_data)
-
-    tmp = json_data.execution_memory.layer_memory_total_mb
-    json_data.execution_memory.layer_memory_total_mb = [i * tp_tmp for i in tmp]
-
-    tmp = json_data.execution_memory.total_memory_mb
-    json_data.execution_memory.total_memory_mb = tmp * tp_tmp
-    json_data = json.dumps(asdict(json_data), indent=2)
-
+    tp_value, _ = extract_tp_bs(json_file_path.name)
+    
+    json_data = json_2_model(read_json_file(json_file_path))
+    
+    # Scale memory values by tp_value
+    json_data.execution_memory.layer_memory_total_mb = [
+        mem * tp_value for mem in json_data.execution_memory.layer_memory_total_mb
+    ]
+    json_data.execution_memory.total_memory_mb *= tp_value
+    
     with open(new_file_path, "w") as f:
-        f.write(json_data)
+        json.dump(asdict(json_data), f, indent=2)
     print(f"Corrected and Written: {new_file_path}")
 
 
-def create_dummy_profile(json_file_path, new_file_path):
-
-    new_gpus = ["A100", "RTX4090"]
-
-    alpha = 0.7
-    beta = 0.3
-    profiled_gpus = "A6000"
+def create_dummy_profile(json_file_path: str | Path, new_file_path: str | Path) -> None:
+    """
+    Create dummy profiles for different GPU types based on a reference profile.
+    
+    Args:
+        json_file_path: Path to source JSON file
+        new_file_path: Path template for new GPU profiles
+    """
+    NEW_GPUS = [GPUType.A100, GPUType.RTX4090]
+    PROFILED_GPU = GPUType.A6000
+    ALPHA, BETA = 0.7, 0.3  # Weights for throughput calculation
+    
+    # Calculate relative throughput for each new GPU
     new_gpus_throughput = {
-        gpu: alpha
-        * gpus_info[gpu]["tensor_fp8_tflops"]
-        / gpus_info[profiled_gpus]["tensor_fp8_tflops"]
-        + beta
-        * gpus_info[gpu]["mem_bandwidth"]
-        / gpus_info[profiled_gpus]["mem_bandwidth"]
-        for gpu in new_gpus
+        gpu: ALPHA * (GPUSpecs.SPECS[gpu]["tensor_fp8_tflops"] / GPUSpecs.SPECS[PROFILED_GPU]["tensor_fp8_tflops"]) +
+             BETA * (GPUSpecs.SPECS[gpu]["mem_bandwidth"] / GPUSpecs.SPECS[PROFILED_GPU]["mem_bandwidth"])
+        for gpu in NEW_GPUS
     }
-
-    # print(f"{new_gpus_throughput=}")
-
-    json_file_path = Path(json_file_path)
-
-    json_data = read_json_file(json_file_path)
-    json_data = json_2_model(json_data)
-
-    for gpu in new_gpus:
-        json_data.execution_time.total_time_ms = (
-            json_data.execution_time.total_time_ms / new_gpus_throughput[gpu]
-        )
-        json_data.execution_time.forward_backward_time_ms = (
-            json_data.execution_time.forward_backward_time_ms / new_gpus_throughput[gpu]
-        )
-        json_data.execution_time.batch_generator_time_ms = (
-            json_data.execution_time.batch_generator_time_ms / new_gpus_throughput[gpu]
-        )
-        # json_data.execution_time.layernorm_grads_all_reduce_time_ms /= new_gpus_throughput[gpu]
-        # json_data.execution_time.embedding_grads_all_reduce_time_ms /= new_gpus_throughput[gpu]
-        json_data.execution_time.optimizer_time_ms = (
-            json_data.execution_time.optimizer_time_ms / new_gpus_throughput[gpu]
-        )
+    
+    json_data = json_2_model(read_json_file(Path(json_file_path)))
+    
+    for gpu in NEW_GPUS:
+        throughput = new_gpus_throughput[gpu]
+        
+        # Scale execution times by GPU throughput
+        json_data.execution_time.total_time_ms /= throughput
+        json_data.execution_time.forward_backward_time_ms /= throughput
+        json_data.execution_time.batch_generator_time_ms /= throughput
+        json_data.execution_time.optimizer_time_ms /= throughput
         json_data.execution_time.layer_compute_total_ms = [
-            i / new_gpus_throughput[gpu]
-            for i in json_data.execution_time.layer_compute_total_ms
+            time / throughput for time in json_data.execution_time.layer_compute_total_ms
         ]
-        json_data_dump = json.dumps(asdict(json_data), indent=2)
-
-        new_file_path_gpu = new_file_path.replace("A6000", gpu)
+        
+        # Write GPU-specific profile
+        new_file_path_gpu = str(new_file_path).replace(PROFILED_GPU, gpu)
         with open(new_file_path_gpu, "w") as f:
-            f.write(json_data_dump)
+            json.dump(asdict(json_data), indent=2)
         print(f"Dummy Data for: {new_file_path_gpu}")
